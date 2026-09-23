@@ -225,7 +225,7 @@ test("fileserver GET with open-ended Range header returns 206", async (t) => {
   assert.equal(res.status, 206, "Status is 206");
   assert.equal(
     res.headers.get("content-range"),
-    `bytes 3500-3552/${INDEX_SIZE}`,
+    `bytes 3500-${INDEX_SIZE - 1}/${INDEX_SIZE}`,
     "Content-Range is correct",
   );
 
