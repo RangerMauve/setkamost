@@ -1,14 +1,19 @@
 import test from "node:test";
 import assert from "node:assert";
-import makeHyperHTTPFetch from "hyper-http-fetch";
-import createTestnet from "hyperdht/testnet.js";
-import { makeFileServer, resolveFile } from "../src/fileserver.js";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
+import { stat } from "node:fs/promises";
+
+import makeHyperHTTPFetch from "hyper-http-fetch";
+
+import createTestnet from "hyperdht/testnet.js";
+import { makeFileServer, resolveFile } from "../src/fileserver.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_FOLDER = resolve(__dirname, "../app/");
+
+const { size: INDEX_SIZE } = await stat(resolve(ROOT_FOLDER, "index.html"));
 
 /**
  * @param {import('node:test').TestContext} t
@@ -176,7 +181,7 @@ test("fileserver GET with Range header returns 206 and partial content", async (
   );
   assert.equal(
     res.headers.get("content-range"),
-    "bytes 0-99/3553",
+    `bytes 0-99/${INDEX_SIZE}`,
     "Content-Range is correct",
   );
   assert.equal(
@@ -198,7 +203,7 @@ test("fileserver GET with mid-file Range header returns 206", async (t) => {
   assert.equal(res.status, 206, "Status is 206");
   assert.equal(
     res.headers.get("content-range"),
-    "bytes 1000-1999/3553",
+    `bytes 1000-1999/${INDEX_SIZE}`,
     "Content-Range is correct",
   );
   assert.equal(
@@ -220,7 +225,7 @@ test("fileserver GET with open-ended Range header returns 206", async (t) => {
   assert.equal(res.status, 206, "Status is 206");
   assert.equal(
     res.headers.get("content-range"),
-    "bytes 3500-3552/3553",
+    `bytes 3500-3552/${INDEX_SIZE}`,
     "Content-Range is correct",
   );
 
@@ -238,7 +243,7 @@ test("fileserver HEAD with Range header includes Content-Range", async (t) => {
   assert.equal(res.status, 204, "Status is 204");
   assert.equal(
     res.headers.get("content-range"),
-    "bytes 0-49/3553",
+    `bytes 0-49/${INDEX_SIZE}`,
     "Content-Range is correct",
   );
   assert.equal(res.headers.get("content-length"), "50", "Content-Length is 50");
@@ -251,7 +256,7 @@ test("fileserver GET without Range returns full file", async (t) => {
   assert.equal(res.status, 200, "Status is 200");
   assert.equal(
     res.headers.get("content-length"),
-    "3553",
+    `${INDEX_SIZE}`,
     "Content-Length is full size",
   );
   assert.equal(
@@ -261,5 +266,5 @@ test("fileserver GET without Range returns full file", async (t) => {
   );
 
   const body = await res.arrayBuffer();
-  assert.equal(body.byteLength, 3553, "Body is full size");
+  assert.equal(body.byteLength, INDEX_SIZE, "Body is full size");
 });
