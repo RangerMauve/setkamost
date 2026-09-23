@@ -6,6 +6,7 @@ import { mkdir } from "node:fs/promises";
 import { JsonRpc } from "./jsonrpc.js";
 import { Daemon } from "./daemon.js";
 import { HyperHttpProxy } from "./proxy.js";
+import { installService, uninstallService } from "./service.js";
 
 import Hyperdht from "hyperdht";
 import xdg from "xdg-portable";
@@ -79,6 +80,76 @@ export function createProgram() {
       } catch {
         console.error(`Failed to stop daemon (PID ${pid})`);
         process.exit(1);
+      }
+    });
+
+  daemon
+    .command("install")
+    .description("Install as a systemd user service")
+    .option("--no-start", "Install without starting the service")
+    .action(async (opts, cmd) => {
+      const socketPath = /** @type {string} */ (cmd.optsWithGlobals().socket);
+      try {
+        const { unitPath, started } = await installService({
+          socketPath,
+          start: opts.start,
+        });
+        console.log(`Installed unit file at ${unitPath}`);
+        console.log("Service enabled.");
+        if (started) {
+          console.log("Service started.");
+        }
+      } catch (err) {
+        const msg = /** @type {Error} */ (err).message;
+        console.error(`Failed to install service: ${msg}`);
+        process.exit(1);
+      }
+    });
+
+  daemon
+    .command("uninstall")
+    .description("Remove the systemd user service")
+    .action(async () => {
+      const { removed } = await uninstallService();
+      if (removed) {
+        console.log("Service removed.");
+      } else {
+        console.log("No service found to remove.");
+      }
+    });
+
+  daemon
+    .command("status")
+    .description("Check if the daemon is running")
+    .action(async (opts, cmd) => {
+      const socketPath = /** @type {string} */ (cmd.optsWithGlobals().socket);
+
+      try {
+        const client = await connectRpc(socketPath);
+        client.destroy();
+        console.log(`running (socket: ${socketPath})`);
+      } catch {
+        // Socket not reachable — check for stale PID
+        const { existsSync, readFileSync } = await import("node:fs");
+        const pidPath = socketPath + ".pid";
+        if (existsSync(pidPath)) {
+          const pid = Number(readFileSync(pidPath, "utf8"));
+          try {
+            process.kill(pid, 0);
+            console.log(
+              `stale (PID ${pid} exists but socket is not responding)`,
+            );
+            process.exit(1);
+          } catch {
+            console.log(
+              `stale PID file (PID ${pid} not running), socket: ${socketPath}`,
+            );
+            process.exit(1);
+          }
+        } else {
+          console.log("not running");
+          process.exit(1);
+        }
       }
     });
 

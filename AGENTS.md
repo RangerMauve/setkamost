@@ -37,7 +37,8 @@ src/
   urls.js           makeURL/parseURL — hyper+http:// URL ↔ Buffer conversion
   jsonrpc.js        JsonRpc class — Unix socket JSON-RPC protocol
   daemon.js         Daemon class — Unix socket server wrapping the proxy + state persistence
-  cli.js            CLI commands (commander-based) — daemon start/stop, expose-*, list
+  service.js        systemd user service management (install/uninstall/status helpers)
+  cli.js            CLI commands (commander-based) — daemon start/stop/install/uninstall/status, expose-*, list
   index.js          Public library exports
 app/
   index.js          Electron main process
@@ -80,6 +81,15 @@ Key methods:
 
 Wraps the proxy behind a Unix domain socket JSON-RPC server. Persists `proxy.toJSON()` to `<storagePath>/state.json` after every mutation and on shutdown. Loads state on startup before accepting connections. Writes a PID file at `<socketPath>.pid`.
 
+### Service (`src/service.js`)
+
+Systemd user service management. Unit file lives at `~/.config/systemd/user/setkamost.service`. Exports:
+- `generateUnitFile(execPath, scriptPath, socketPath)` → unit file content string
+- `installService({socketPath, start?})` → writes unit file, enables + optionally starts the service
+- `uninstallService()` → disables, stops, removes unit file
+- `unitFilePath()` → absolute path to the unit file
+- `runSystemctl(args)` → promisified `systemctl --user` call
+
 ### JSON-RPC (`src/jsonrpc.js`)
 
 Line-delimited JSON-RPC over a Unix socket. The Daemon registers handlers: `list`, `exposeLocalPort`, `exposeRemoteAsLocal`, `exposeFolder`.
@@ -93,7 +103,7 @@ Line-delimited JSON-RPC over a Unix socket. The Daemon registers handlers: `list
 
 ### CLI (`src/cli.js` + `bin/setkamost.js`)
 
-Commander-based. Commands: `daemon start`, `daemon stop`, `expose-local`, `expose-remote`, `expose-folder`, `list`. All accept `--socket <path>` (defaults to `$SETKAMOST_SOCKET` or `~/.local/state/setkamost/sock`).
+Commander-based. Commands: `daemon start`, `daemon stop`, `daemon install`, `daemon uninstall`, `daemon status`, `expose-local`, `expose-remote`, `expose-folder`, `list`. All accept `--socket <path>` (defaults to `$SETKAMOST_SOCKET` or `~/.local/state/setkamost/sock`). `daemon install` supports `--no-start`.
 
 ### Persistence
 
