@@ -1,6 +1,6 @@
 {
   "name": "setkamost",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Expose your HTTP services over peer to peer connections with a friendly electron based graphical interface",
   "keywords": [
     "hypercore",
@@ -58,16 +58,26 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "linux": {
       "artifactName": "${name}-${version}-${os}-${arch}.${ext}",
-      "target": ["deb", "AppImage", "apk", "pacman"],
+      "target": [
+        "deb",
+        "AppImage",
+        "apk",
+        "pacman"
+      ],
       "category": "Network;FileTransfer:P2P"
     }
   },
