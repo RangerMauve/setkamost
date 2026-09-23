@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
+import { homedir } from "node:os";
 
 import xdg from "xdg-portable";
 
@@ -8,22 +9,44 @@ import xdg from "xdg-portable";
 // @ts-ignore default export is callable at runtime but types differ
 const xdgInstance = xdg;
 
+/** @type {"systemd" | "launchd"} */
+const platform = process.platform === "darwin" ? "launchd" : "systemd";
+
+const APP_ID = "moe.mauve.setkamost";
+const SERVICE_NAME = `${APP_ID}.daemon`;
+
 /**
- * Absolute path to the systemd user unit file.
+ * Absolute path to the service unit file (platform-specific).
  * @returns {string}
  */
 export function unitFilePath() {
+  if (platform === "launchd") {
+    return join(homedir(), "Library", "LaunchAgents", `${SERVICE_NAME}.plist`);
+  }
   return join(xdgInstance.config(), "systemd", "user", "setkamost.service");
 }
 
 /**
- * Generate the systemd unit file content.
+ * Generate the service unit file content (platform-specific).
  * @param {string} execPath - Absolute path to the node binary
  * @param {string} scriptPath - Absolute path to the setkamost entry script
  * @param {string} socketPath - Socket path for the daemon
  * @returns {string}
  */
 export function generateUnitFile(execPath, scriptPath, socketPath) {
+  if (platform === "launchd") {
+    return generatePlist(execPath, scriptPath, socketPath);
+  }
+  return generateSystemdUnit(execPath, scriptPath, socketPath);
+}
+
+/**
+ * @param {string} execPath
+ * @param {string} scriptPath
+ * @param {string} socketPath
+ * @returns {string}
+ */
+export function generateSystemdUnit(execPath, scriptPath, socketPath) {
   return [
     "[Unit]",
     "Description=setkamost P2P HTTP proxy daemon",
@@ -41,24 +64,68 @@ export function generateUnitFile(execPath, scriptPath, socketPath) {
 }
 
 /**
- * Run a systemctl --user command.
- * @param {string[]} args
+ * @param {string} execPath
+ * @param {string} scriptPath
+ * @param {string} socketPath
+ * @returns {string}
+ */
+export function generatePlist(execPath, scriptPath, socketPath) {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"',
+    '  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+    '<plist version="1.0">',
+    "<dict>",
+    "  <key>Label</key>",
+    `  <string>${SERVICE_NAME}</string>`,
+    "  <key>ProgramArguments</key>",
+    "  <array>",
+    `    <string>${execPath}</string>`,
+    `    <string>${scriptPath}</string>`,
+    "    <string>daemon</string>",
+    "    <string>start</string>",
+    "    <string>--socket</string>",
+    `    <string>${socketPath}</string>`,
+    "  </array>",
+    "  <key>RunAtLoad</key>",
+    "  <true/>",
+    "  <key>KeepAlive</key>",
+    "  <dict>",
+    "    <key>SuccessfulExit</key>",
+    "    <false/>",
+    "  </dict>",
+    "</dict>",
+    "</plist>",
+    "",
+  ].join("\n");
+}
+
+/**
+ * Run a platform-specific service manager command.
+ * @param {string[]} args - Arguments to pass
  * @returns {Promise<void>}
  */
-export function runSystemctl(args) {
+export function runServiceManager(args) {
   return new Promise((resolveP, reject) => {
-    execFile("systemctl", ["--user", ...args], (err, _stdout, stderr) => {
-      if (err) reject(new Error(stderr || err.message));
-      else resolveP();
-    });
+    if (platform === "launchd") {
+      execFile("launchctl", args, (err, _stdout, stderr) => {
+        if (err) reject(new Error(stderr || err.message));
+        else resolveP();
+      });
+    } else {
+      execFile("systemctl", ["--user", ...args], (err, _stdout, stderr) => {
+        if (err) reject(new Error(stderr || err.message));
+        else resolveP();
+      });
+    }
   });
 }
 
 /**
- * Install the systemd user service.
+ * Install the platform service.
  * @param {object} options
  * @param {string} options.socketPath - Socket path for the daemon
- * @param {boolean} [options.start=true] - Whether to start the service after enabling
+ * @param {boolean} [options.start=true] - Whether to start the service after installing
  * @returns {Promise<{unitPath: string, started: boolean}>}
  */
 export async function installService({ socketPath, start = true }) {
@@ -69,29 +136,38 @@ export async function installService({ socketPath, start = true }) {
   await mkdir(dirname(unitPath), { recursive: true });
   await writeFile(unitPath, content);
 
-  await runSystemctl(["daemon-reload"]);
-  await runSystemctl(["enable", "setkamost.service"]);
-
   let started = false;
-  if (start) {
-    await runSystemctl(["start", "setkamost.service"]);
-    started = true;
+  if (platform === "launchd") {
+    if (start) {
+      await runServiceManager(["load", unitPath]);
+      started = true;
+    }
+  } else {
+    await runServiceManager(["daemon-reload"]);
+    await runServiceManager(["enable", "setkamost.service"]);
+    if (start) {
+      await runServiceManager(["start", "setkamost.service"]);
+      started = true;
+    }
   }
 
   return { unitPath, started };
 }
 
 /**
- * Uninstall the systemd user service.
+ * Uninstall the platform service.
  * @returns {Promise<{removed: boolean}>}
  */
 export async function uninstallService() {
   const unitPath = unitFilePath();
 
-  try {
-    await runSystemctl(["disable", "--now", "setkamost.service"]);
-  } catch {
-    // Service may not be running or enabled
+  if (platform === "launchd") {
+    await runServiceManager(["unload", unitPath]).catch(() => {});
+  } else {
+    await runServiceManager(["disable", "--now", "setkamost.service"]).catch(
+      () => {},
+    );
+    await runServiceManager(["daemon-reload"]).catch(() => {});
   }
 
   let removed = false;
@@ -100,12 +176,6 @@ export async function uninstallService() {
     removed = true;
   } catch {
     // Unit file may not exist
-  }
-
-  try {
-    await runSystemctl(["daemon-reload"]);
-  } catch {
-    // Non-fatal
   }
 
   return { removed };
