@@ -230,7 +230,8 @@ test("fileserver GET with open-ended Range header returns 206", async (t) => {
   );
 
   const body = await res.arrayBuffer();
-  assert.equal(body.byteLength, 53, "Body is 53 bytes");
+  const expectedSize = INDEX_SIZE - 3500
+  assert.equal(body.byteLength, expectedSize, `Body is ${expectedSize} bytes`);
 });
 
 test("fileserver HEAD with Range header includes Content-Range", async (t) => {
