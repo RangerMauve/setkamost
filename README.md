@@ -27,9 +27,22 @@ The daemon is a Unix-domain-socket JSON-RPC server that owns the `HyperHttpProxy
 ```sh
 setkamost daemon start          # start the daemon (restores prior state)
 setkamost daemon stop           # send SIGTERM to the daemon
+setkamost daemon status         # check if the daemon is running
+setkamost daemon install        # install as a system service (systemd or launchd)
+setkamost daemon install --no-start  # install without starting
+setkamost daemon uninstall      # remove the system service
 ```
 
 The daemon writes a PID file at `<socket>.pid` on startup and cleans it up on exit.
+
+#### System service
+
+`daemon install` auto-detects the platform:
+
+- **Linux** — installs a systemd user service at `~/.config/systemd/user/setkamost.service`
+- **macOS** — installs a LaunchAgent at `~/Library/LaunchAgents/moe.mauve.setkamost.daemon.plist`
+
+Both auto-restart on crash and start at login. `daemon uninstall` stops and removes the service.
 
 ### Expose services
 

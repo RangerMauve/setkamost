@@ -83,12 +83,17 @@ Wraps the proxy behind a Unix domain socket JSON-RPC server. Persists `proxy.toJ
 
 ### Service (`src/service.js`)
 
-Systemd user service management. Unit file lives at `~/.config/systemd/user/setkamost.service`. Exports:
-- `generateUnitFile(execPath, scriptPath, socketPath)` → unit file content string
-- `installService({socketPath, start?})` → writes unit file, enables + optionally starts the service
+Cross-platform service management (systemd on Linux, launchd on macOS). Auto-detects via `process.platform`. Exports:
+- `generateUnitFile(execPath, scriptPath, socketPath)` → unit file content (systemd INI or plist XML)
+- `generateSystemdUnit(...)` / `generatePlist(...)` → individual generators
+- `installService({socketPath, start?})` → writes unit file, enables + optionally starts
 - `uninstallService()` → disables, stops, removes unit file
 - `unitFilePath()` → absolute path to the unit file
-- `runSystemctl(args)` → promisified `systemctl --user` call
+- `runServiceManager(args)` → promisified `systemctl --user` / `launchctl` call
+
+Service identifiers:
+- Linux: `setkamost.service` at `~/.config/systemd/user/`
+- macOS: `moe.mauve.setkamost.daemon` at `~/Library/LaunchAgents/`
 
 ### JSON-RPC (`src/jsonrpc.js`)
 
@@ -103,7 +108,7 @@ Line-delimited JSON-RPC over a Unix socket. The Daemon registers handlers: `list
 
 ### CLI (`src/cli.js` + `bin/setkamost.js`)
 
-Commander-based. Commands: `daemon start`, `daemon stop`, `daemon install`, `daemon uninstall`, `daemon status`, `expose-local`, `expose-remote`, `expose-folder`, `list`. All accept `--socket <path>` (defaults to `$SETKAMOST_SOCKET` or `~/.local/state/setkamost/sock`). `daemon install` supports `--no-start`.
+Commander-based. Commands: `daemon start`, `daemon stop`, `daemon install`, `daemon uninstall`, `daemon status`, `expose-local`, `expose-remote`, `expose-folder`, `list`. All accept `--socket <path>` (defaults to `$SETKAMOST_SOCKET` or `~/.local/state/setkamost/sock`). `daemon install` supports `--no-start`. `daemon install`/`uninstall` are cross-platform (systemd on Linux, launchd on macOS).
 
 ### Persistence
 
